@@ -1,0 +1,692 @@
+:root {
+  /* A near-black grey background, with text contrast comfortable to read for hours. */
+  --bg: #18181b;
+  --bg-raised: #202024;
+  --bg-hover: #27272a;
+  --border: #2e2e33;
+  --fg: #e4e4e7;
+  --fg-dim: #a1a1aa;
+  --muted: #52525b;
+  --partial: #7c7c86;
+  --accent: #ef4444;
+  --accent-dim: #7f1d1d;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --topbar-h: 44px;
+  --transcript-size: 18px;
+
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: default;
+  border-radius: 6px;
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  outline: none;
+  user-select: text;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #3f3f46;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Room for the macOS traffic-light buttons that float over the title bar. Other
+     platforms do not have them, so no gutter is reserved. */
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+/* The macOS traffic lights float over our own top bar, so space has to be left for them.
+   Windows puts its window buttons in its own title bar, so it needs none. */
+:root[data-os="macos"] .topbar {
+  padding-left: 78px;
+}
+
+/* Only the device name may shrink; buttons must never be clipped. */
+.topbar > * {
+  flex-shrink: 0;
+}
+
+.topbar .chip {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* In a narrow window, drop the least important things first: the device name, then meters. */
+@media (max-width: 640px) {
+  .topbar .chip {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    gap: 6px;
+  }
+
+  .topbar .meter {
+    display: none;
+  }
+
+  /* Text size is still adjustable with ⌘+ and ⌘−, so those buttons go first. */
+  .topbar .size-btn {
+    display: none;
+  }
+}
+
+.spacer {
+  flex: 1;
+  align-self: stretch;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.icon-btn.on {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+
+.icon-btn svg {
+  display: block;
+}
+
+.icon-btn.danger:hover {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Action buttons are tightened up so they read as one block rather than loose buttons. */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rec-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.rec-btn:hover {
+  background: var(--bg-hover);
+}
+
+.rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.rec-btn.active .rec-dot {
+  background: var(--accent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--fg-dim);
+  min-width: 42px;
+}
+
+.chip {
+  font-size: 12px;
+  color: var(--fg-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 7px;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter {
+  width: 42px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter > i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transition: width 80ms linear;
+}
+
+.meter.mic > i {
+  background: #38bdf8;
+}
+
+/* ---------------------------------------------------------------- transkrip */
+
+.body {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 60px;
+}
+
+.line {
+  display: flex;
+  gap: 14px;
+  padding: 5px 0;
+  line-height: 1.55;
+  font-size: var(--transcript-size);
+  user-select: text;
+}
+
+.line .time {
+  flex: 0 0 52px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding-top: 6px;
+  user-select: none;
+}
+
+.line .text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.line.partial .text {
+  color: var(--partial);
+  font-style: italic;
+}
+
+.line .text[contenteditable="true"] {
+  background: var(--bg-raised);
+  outline: 1px solid #3f3f46;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+}
+
+.jump {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.jump:hover {
+  background: var(--bg-hover);
+}
+
+.empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 0 40px;
+  line-height: 1.7;
+}
+
+/* --- live view: two zones with a fixed reading line --- */
+
+.caption {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* A fixed ratio, rather than content, decides the heights. This is what makes a new
+     sentence always appear at the same height, however much text sits above it. */
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  padding: 18px 32px 22px;
+  overflow: hidden;
+}
+
+.caption-history,
+.caption-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* History grows upward from the reading line and is clipped at the top edge. */
+.caption-history {
+  justify-content: flex-end;
+}
+
+/* The running sentence always starts exactly at the reading line and grows downward. */
+.caption-current {
+  justify-content: flex-start;
+  padding-top: 14px;
+}
+
+.caption p {
+  margin: 0;
+  width: 100%;
+  /* Reading measure. Without it, a wide window produces 140-character lines and the eye
+     loses its place moving to the next one. */
+  max-width: 46em;
+  font-size: var(--transcript-size);
+  line-height: 1.8;
+  overflow-wrap: break-word;
+}
+
+.caption-current p {
+  color: #fafafa;
+}
+
+/* Only the text itself is selectable; the empty space around it drags the window, because
+   in this mode almost the entire window is text. */
+.caption p span,
+.caption-current p {
+  user-select: text;
+  cursor: text;
+}
+
+.caption .seg {
+  transition: color 500ms ease-out;
+}
+
+/* ---------------------------------------------------------------- banner & toast */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  border: 1px solid;
+  user-select: text;
+}
+
+.banner.warn {
+  background: #2a1c05;
+  border-color: #7c5310;
+  color: #fbbf24;
+}
+
+.banner.error {
+  background: #2a0f0f;
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.banner .close {
+  margin-left: auto;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0 4px;
+}
+
+.banner ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.banner li {
+  margin: 2px 0;
+}
+
+/* ---------------------------------------------------------------- panel */
+
+.panel {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panel-body {
+  overflow-y: auto;
+  padding: 12px 16px 40px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  max-width: 320px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.search-box:focus-within {
+  border-color: #3f3f46;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 0;
+  border: none;
+  background: none;
+}
+
+.search-box input:focus {
+  border: none;
+}
+
+.session-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.session-row:hover {
+  background: var(--bg-raised);
+  border-color: var(--border);
+}
+
+.session-row .title {
+  font-size: 14px;
+}
+
+.session-row .meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.session-row .snippet {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-top: 2px;
+}
+
+.session-row .snippet mark {
+  background: #3f3f1a;
+  color: #fde68a;
+  border-radius: 2px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 16px;
+  max-width: 560px;
+}
+
+.field > label {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* Standalone rather than scoped to .field, so it can be used anywhere. */
+.hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 13px;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn.danger {
+  color: #fca5a5;
+  border-color: var(--accent-dim);
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-row .grow {
+  flex: 1;
+}
+
+.model-row .note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.progress {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.progress > i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+/* Quality choices on the first-run screen. */
+.profile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.profile:hover {
+  background: var(--bg-raised);
+}
+
+.profile.active {
+  border-color: #3f3f46;
+  background: var(--bg-raised);
+}
+
+.profile input {
+  margin-top: 3px;
+}
+
+.profile .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.profile .tag {
+  padding: 1px 5px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #86efac;
+  background: #052e16;
+  border: 1px solid #14532d;
+  border-radius: 4px;
+}
+
+.profile .size {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.profile .note {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--fg-dim);
+  user-select: text;
+  word-break: break-all;
+}
+
+.path b {
+  display: inline-block;
+  min-width: 92px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+h3.section {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 22px 0 10px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #313136;
+  border-radius: 5px;
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

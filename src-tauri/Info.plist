@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Auto-Transcript records audio from the input device you choose in order to transcribe your meetings locally on this machine.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Auto-Transcript captures the audio coming out of your computer so it can transcribe what the other meeting participants say.</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+</dict>
+</plist>

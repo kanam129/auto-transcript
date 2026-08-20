@@ -1,0 +1,15 @@
+# dependencies & build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# distributable binaries belong in GitHub Releases, never in git history
+*.dmg
+*.exe
+*.msi
+*.app/
+
+# runtime noise
+*.log
+.DS_Store

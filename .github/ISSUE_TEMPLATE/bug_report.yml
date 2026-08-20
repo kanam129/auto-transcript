@@ -1,0 +1,64 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you paste anything: the log contains your audio device names. It does **not**
+        contain transcript text, but do have a look before posting.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "macOS 15.2, or Windows 11 23H2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: System audio source
+      description: Shown in Settings, next to the device name.
+      options:
+        - Direct capture
+        - Virtual driver (BlackHole, Multi-Output Device, VB-Cable…)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: quality
+    attributes:
+      label: Quality level
+      placeholder: "Best accuracy / Balanced / Lightest"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: |
+        macOS: `~/Library/Logs/auto-transcript/app.log.YYYY-MM-DD`
+        Windows: `%APPDATA%\auto-transcript\logs\`
+        Settings → *Where your data lives* will open the folder for you.
+      render: text

@@ -1,0 +1,43 @@
+name: Transcription quality problem
+description: The transcript is wrong, garbled, missing, or too slow
+labels: [accuracy]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Quality problems are hard to act on from a description alone. Numbers or a sample
+        make the difference between a report that can be fixed and one that cannot.
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What was said, and what the app produced
+      description: Even a couple of sentences helps.
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language of the meeting
+      placeholder: "English, Indonesian, or a mix of both"
+    validations:
+      required: true
+
+  - type: input
+    id: quality
+    attributes:
+      label: Quality level
+      placeholder: "Best accuracy / Balanced / Lightest"
+    validations:
+      required: true
+
+  - type: textarea
+    id: measurement
+    attributes:
+      label: Measurement (optional but very welcome)
+      description: |
+        If you can reproduce it from a recording, the simulator prints the latency the user
+        actually experiences:
+        `cargo run --release --example sim -- your-audio.wav`
+      render: text

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Never cancel the other platform on a single failure: the whole point of this
+      # matrix is finding out which platform broke, not just that something did.
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            os: macos-14
+          - name: Windows
+            os: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # whisper.cpp is compiled from source, so a cold build is slow. Cache it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Runs on both platforms on purpose. Clippy type-checks the code behind
+      # #[cfg(target_os = "windows")], which is the only way that code gets compiled
+      # at all without someone owning a Windows machine.
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        working-directory: src-tauri
+        run: cargo test
+
+      # Guards a bug class that only ever appears on a machine that has never run the
+      # app: the data directory does not exist yet and SQLite will not create it.
+      - name: Clean first-run check
+        working-directory: src-tauri
+        run: cargo run --release --example freshstart
+
+      - name: Type-check and bundle the frontend
+        run: npm run build
+
+      - name: Build the application
+        run: npm run tauri build

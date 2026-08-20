@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            os: macos-14
+            args: --target aarch64-apple-darwin
+          - name: macOS (Intel)
+            os: macos-14
+            args: --target x86_64-apple-darwin
+          - name: Windows
+            os: windows-latest
+            args: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-14' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing is optional. Without these secrets the build is ad-hoc signed and
+          # macOS users have to clear the quarantine attribute by hand — see the README.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Auto-Transcript ${{ github.ref_name }}
+          releaseBody: |
+            See CHANGELOG.md for what changed.
+
+            **macOS:** these builds are unsigned unless a signing certificate was
+            configured. If macOS says the app "is damaged", it is not — that is Gatekeeper
+            reacting to the missing signature. Run:
+
+            ```
+            xattr -dr com.apple.quarantine /Applications/Auto-Transcript.app
+            ```
+
+            **Models are not bundled.** The app downloads the model you choose on first run.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
