@@ -165,6 +165,27 @@ fn run_device(
     }
 }
 
+/// Whether a stream error means the stream is actually broken and has to be rebuilt.
+///
+/// This distinction matters much more than it looks. WASAPI reports an underrun or overrun
+/// every time the render endpoint runs dry, which on a loopback capture is every silence —
+/// and a meeting is mostly silence between sentences. Treating those as fatal tore the
+/// stream down and rebuilt it 112 times in 6 seconds when measured on Windows, and while
+/// that churn was going on, nothing was captured at all.
+fn is_fatal(kind: cpal::ErrorKind) -> bool {
+    use cpal::ErrorKind::*;
+    match kind {
+        // A glitch in the audio, and nothing more: the stream keeps running.
+        Xrun => false,
+        // cpal rerouted the stream itself; it explicitly does not need a rebuild.
+        DeviceChanged => false,
+        // We asked for real-time priority and did not get it. Audio still flows.
+        RealtimeDenied => false,
+        // Everything else means the stream cannot deliver audio any more.
+        _ => true,
+    }
+}
+
 fn build_stream(
     device_id: &str,
     supported: &cpal::SupportedStreamConfig,
@@ -175,9 +196,13 @@ fn build_stream(
     let config: cpal::StreamConfig = supported.config();
     let channels = config.channels as usize;
     let err_flag = failed.clone();
-    let err_fn = move |e| {
-        tracing::error!("cpal stream error: {e}");
-        err_flag.store(true, Ordering::SeqCst);
+    let err_fn = move |e: cpal::Error| {
+        if is_fatal(e.kind()) {
+            tracing::error!("cpal stream error: {e}");
+            err_flag.store(true, Ordering::SeqCst);
+        } else {
+            tracing::debug!("recoverable stream glitch: {e}");
+        }
     };
 
     macro_rules! build {

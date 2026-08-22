@@ -53,6 +53,133 @@ pub fn audio_ctx_for_samples(n: usize) -> i32 {
     1500
 }
 
+/// Which accelerator this model should run on, decided when the app starts rather than
+/// when it was compiled.
+///
+/// Metal is part of every Mac, so there the answer is always yes. Windows is the reason
+/// this function exists: the Vulkan backend is compiled in by the `gpu-vulkan` feature,
+/// but whether the machine running the binary can actually use it is a separate question.
+/// A desktop with a discrete card and a virtual machine with no graphics driver at all run
+/// the same executable. Asking at runtime lets one build serve both \u2014 the GPU when there
+/// is one, the CPU when there is not, with no second binary and nothing for the user to
+/// configure.
+///
+/// `AUTO_TRANSCRIPT_GPU=0` forces the CPU path, which is the first thing to try when a
+/// graphics driver starts misbehaving.
+fn gpu_choice() -> Option<String> {
+    if matches!(
+        std::env::var("AUTO_TRANSCRIPT_GPU").as_deref(),
+        Ok("0") | Ok("false") | Ok("off")
+    ) {
+        tracing::info!("GPU disabled by AUTO_TRANSCRIPT_GPU");
+        return None;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Some("Metal".to_string())
+    }
+
+    #[cfg(all(target_os = "windows", feature = "gpu-vulkan"))]
+    {
+        match vulkan_device_count() {
+            0 => {
+                tracing::info!("no usable Vulkan device on this machine; running on the CPU");
+                None
+            }
+            n => Some(format!("Vulkan ({n} device(s))")),
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", all(target_os = "windows", feature = "gpu-vulkan"))))]
+    {
+        None
+    }
+}
+
+/// Whether this machine has a Vulkan device that ggml can use.
+///
+/// Deliberately asked of the Vulkan loader rather than of ggml. `ggml_backend_vk_*` looks
+/// like the obvious way to count devices, but calling it on a machine whose loader finds
+/// no driver takes the whole process down with no message at all — measured, not guessed.
+/// The loader's own C API reports the same thing through a return code, which is
+/// something we can act on.
+#[cfg(all(target_os = "windows", feature = "gpu-vulkan"))]
+fn vulkan_device_count() -> u32 {
+    use std::ffi::c_void;
+    use std::os::raw::c_char;
+    use std::ptr;
+
+    const VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO: u32 = 1;
+    const VK_SUCCESS: i32 = 0;
+
+    #[repr(C)]
+    struct VkInstanceCreateInfo {
+        s_type: u32,
+        p_next: *const c_void,
+        flags: u32,
+        p_application_info: *const c_void,
+        enabled_layer_count: u32,
+        pp_enabled_layer_names: *const *const c_char,
+        enabled_extension_count: u32,
+        pp_enabled_extension_names: *const *const c_char,
+    }
+
+    type PfnCreateInstance =
+        unsafe extern "system" fn(*const VkInstanceCreateInfo, *const c_void, *mut *mut c_void) -> i32;
+    type PfnEnumerateDevices =
+        unsafe extern "system" fn(*mut c_void, *mut u32, *mut *mut c_void) -> i32;
+    type PfnDestroyInstance = unsafe extern "system" fn(*mut c_void, *const c_void);
+
+    unsafe extern "system" {
+        fn LoadLibraryA(name: *const c_char) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
+    }
+
+    unsafe {
+        // On a machine with no Vulkan driver this library does not exist. `build.rs`
+        // delay-loads it precisely so we reach this line instead of Windows refusing to
+        // start the executable.
+        let lib = LoadLibraryA(c"vulkan-1.dll".as_ptr());
+        if lib.is_null() {
+            return 0;
+        }
+
+        let create = GetProcAddress(lib, c"vkCreateInstance".as_ptr());
+        let enumerate = GetProcAddress(lib, c"vkEnumeratePhysicalDevices".as_ptr());
+        let destroy = GetProcAddress(lib, c"vkDestroyInstance".as_ptr());
+        if create.is_null() || enumerate.is_null() || destroy.is_null() {
+            return 0;
+        }
+        let create: PfnCreateInstance = std::mem::transmute(create);
+        let enumerate: PfnEnumerateDevices = std::mem::transmute(enumerate);
+        let destroy: PfnDestroyInstance = std::mem::transmute(destroy);
+
+        let info = VkInstanceCreateInfo {
+            s_type: VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: 0,
+            p_application_info: ptr::null(),
+            enabled_layer_count: 0,
+            pp_enabled_layer_names: ptr::null(),
+            enabled_extension_count: 0,
+            pp_enabled_extension_names: ptr::null(),
+        };
+        let mut instance: *mut c_void = ptr::null_mut();
+        if create(&info, ptr::null(), &mut instance) != VK_SUCCESS || instance.is_null() {
+            return 0;
+        }
+
+        let mut count: u32 = 0;
+        let result = enumerate(instance, &mut count, ptr::null_mut());
+        destroy(instance, ptr::null());
+        if result != VK_SUCCESS {
+            return 0;
+        }
+        count
+    }
+}
+
 pub struct WhisperEngine {
     ctx: WhisperContext,
     model_id: String,
@@ -65,7 +192,8 @@ impl WhisperEngine {
             return Err(AppError::Model(format!("model '{model_id}' has not been downloaded")));
         }
         let mut cparams = WhisperContextParameters::default();
-        cparams.use_gpu(true);
+        let gpu = gpu_choice();
+        cparams.use_gpu(gpu.is_some());
         // Flash attention on Metal. Can be turned off with AUTO_TRANSCRIPT_FLASH_ATTN=0 if
         // it ever turns out to misbehave on some device.
         let flash = std::env::var("AUTO_TRANSCRIPT_FLASH_ATTN")
@@ -77,7 +205,10 @@ impl WhisperEngine {
                 .ok_or_else(|| AppError::Model("invalid model path".into()))?,
             cparams,
         )?;
-        tracing::info!("loaded model '{model_id}' from {}", path.display());
+        match &gpu {
+            Some(name) => tracing::info!("loaded model '{model_id}' on {name}"),
+            None => tracing::info!("loaded model '{model_id}' on the CPU"),
+        }
         Ok(Self {
             ctx,
             model_id: model_id.to_string(),

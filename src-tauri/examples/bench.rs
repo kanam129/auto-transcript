@@ -12,16 +12,41 @@ use auto_transcript_lib::stt::model_manager;
 use std::path::PathBuf;
 use std::time::Instant;
 
+/// Peak resident memory of this process, in MB.
+///
+/// Worth having per platform rather than skipping: on an 8 GB machine the memory column is
+/// half the reason this table exists. `ps` does not exist on Windows, so that branch used
+/// to report every model as using 0 MB.
 fn rss_mb() -> f64 {
     let pid = std::process::id();
-    std::process::Command::new("ps")
-        .args(["-o", "rss=", "-p", &pid.to_string()])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|s| s.trim().parse::<f64>().ok())
-        .map(|kb| kb / 1024.0)
-        .unwrap_or(0.0)
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &pid.to_string()])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .map(|kb| kb / 1024.0)
+            .unwrap_or(0.0)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("(Get-Process -Id {pid}).WorkingSet64"),
+            ])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .map(|bytes| bytes / (1024.0 * 1024.0))
+            .unwrap_or(0.0)
+    }
 }
 
 struct Row {

@@ -131,6 +131,11 @@ fn main() {
     eprintln!("Input : {} @ {} Hz", input.name, input.sample_rate);
 
     let host = cpal::default_host();
+    // A virtual loopback device (BlackHole and friends) is used when one exists, because
+    // then it is what the input side is tapping. Otherwise the plain default output is
+    // exactly right: with a CoreAudio process tap or WASAPI loopback, the device being
+    // captured IS an ordinary output device. Insisting on a virtual one made this test
+    // impossible to run on Windows, where no such device exists.
     let out_device = host
         .output_devices()
         .expect("list output devices")
@@ -139,7 +144,8 @@ fn main() {
                 .map(|x| looks_like_loopback(x.name()))
                 .unwrap_or(false)
         })
-        .expect("no loopback output device");
+        .or_else(|| host.default_output_device())
+        .expect("no output device to play through");
     let out_cfg = out_device.default_output_config().expect("config output");
     let out_rate = out_cfg.sample_rate();
     let out_ch = out_cfg.channels() as usize;

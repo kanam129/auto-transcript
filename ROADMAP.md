@@ -14,9 +14,20 @@ profiles · settings migrations.
 
 ## Thin, or verified less than it should be
 
-**Windows has never been used by a human.** CI compiles, lints, unit-tests and bundles it
-on every push, so the platform-specific code is genuinely compiled rather than merely
-written. Nobody has run it in a meeting. A report either way would be valuable.
+**Windows now runs, but has never been used in a meeting.** It has been started on real
+hardware (i5-12400F, RTX 3050, Windows 11): system audio capture, model download and
+transcription all work, and three bugs that only appear when the code is actually executed
+were fixed in the process — see the changelog. What has not been done is a real meeting,
+a soak test, or any accuracy measurement in a language other than English; Windows ships
+no Indonesian voice to synthesise a sample with.
+
+**The CPU-only Windows build cannot keep up.** Every model, including the lightest, runs
+slower than real time on a 6-core desktop CPU — `large-v3-turbo` at RTF 21. With
+`--features gpu-vulkan` on an RTX 3050 the same machine reaches RTF 0.04 and beats the M2
+this project was tuned on. GPU acceleration should probably stop being an opt-in feature
+on Windows, but that means solving the build: the Vulkan SDK is a hard requirement and the
+default MSBuild generator overruns the 260-character path limit, so Ninja has to be used.
+Numbers and the recipe are in BENCHMARK.md.
 
 **No long soak test.** The longest continuous session so far is a few minutes. Memory
 stability, thermal behaviour and timestamp drift over a two-hour meeting are unknown.

@@ -13,7 +13,21 @@ pub mod summarize;
 
 use state::AppState;
 use tauri::{Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{
+    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+};
+
+/// The keystroke that starts and stops recording while the app is in the background.
+///
+/// Command on macOS, Control everywhere else. `SUPER` on Windows is the Windows key, and
+/// Win+Shift+R already belongs to the system screen recorder.
+fn toggle_shortcut() -> Shortcut {
+    #[cfg(target_os = "macos")]
+    let mods = Modifiers::SUPER | Modifiers::SHIFT;
+    #[cfg(not(target_os = "macos"))]
+    let mods = Modifiers::CONTROL | Modifiers::SHIFT;
+    Shortcut::new(Some(mods), Code::KeyR)
+}
 
 fn init_logging() {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -94,27 +108,35 @@ fn fatal_startup_error(message: &str) -> ! {
 pub fn run() {
     init_logging();
 
-    // A global shortcut works while the app is in the background, so recording can be
-    // started without leaving the meeting window.
-    let toggle = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyR);
-
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut(toggle)
-                .expect("invalid global shortcut")
-                .with_handler(move |app, sc, event| {
-                    if sc == &toggle && event.state == ShortcutState::Pressed {
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|app| {
+            // A global shortcut works while the app is in the background, so recording can
+            // be started without leaving the meeting window.
+            //
+            // Registered here rather than through the plugin builder on purpose: when the
+            // combination already belongs to another application, that must cost us the
+            // shortcut and nothing more. Registering it at plugin-init time turned a taken
+            // hotkey into a panic before any window appeared — which is exactly what
+            // happened on Windows, where Win+Shift+R is the system screen recorder.
+            if let Err(e) = app.global_shortcut().on_shortcut(
+                toggle_shortcut(),
+                move |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
                         if let Err(e) = app.emit("shortcut:toggle", ()) {
                             tracing::warn!("could not emit shortcut event: {e}");
                         }
                     }
-                })
-                .build(),
-        )
-        .setup(|app| {
+                },
+            ) {
+                tracing::warn!(
+                    "the global start/stop shortcut is unavailable, most likely because \
+                     another application owns it: {e}"
+                );
+            }
+
             let state = match AppState::new() {
                 Ok(s) => s,
                 Err(e) => fatal_startup_error(&e.to_string()),

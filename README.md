@@ -49,8 +49,8 @@ unavailable, but it is no longer the main path.
 
 | Action | How |
 |---|---|
-| Start / stop recording | The ● button, or **⌘⇧R** (works while the app is in the background) |
-| Text size | **⌘+** / **⌘−** / **⌘0** |
+| Start / stop recording | The ● button, or **⌘⇧R** — **Ctrl+Shift+R** on Windows (works while the app is in the background) |
+| Text size | **⌘+** / **⌘−** / **⌘0** — **Ctrl** on Windows |
 | Keep the window on top | The pin icon, top right |
 | History and search | The clock icon |
 | Fix a wrong word | Double-click the line (in history view) |
@@ -109,6 +109,10 @@ On a Windows PC, install first:
 - [Node.js](https://nodejs.org) 20 or newer
 - **Visual Studio Build Tools** with the "Desktop development with C++" workload
 - [CMake](https://cmake.org/download/) — make sure it is on PATH
+- [LLVM](https://github.com/llvm/llvm-project/releases) — `whisper-rs` generates its
+  bindings with bindgen, which loads `libclang.dll` at build time. Without it the build
+  stops at `Unable to find libclang`. If it lands somewhere other than
+  `C:\Program Files\LLVM`, set `LIBCLANG_PATH` to its `bin` directory.
 - WebView2 Runtime (already bundled with Windows 11)
 
 Then:
@@ -126,14 +130,58 @@ Output lands in `src-tauri\target\release\bundle\nsis\` (an .exe installer) and
 | Area | Behaviour |
 |---|---|
 | Capturing system audio | WASAPI loopback — **no driver, no BlackHole**. Just pick your output device. |
-| Acceleration | CPU by default. For GPU: install the Vulkan SDK and build with `npm run tauri build -- --features gpu-vulkan`. |
-| Recommended model | Without a GPU, `large-v3-turbo` is likely too heavy. Start with `small-q5_1` and measure with `cargo run --release --example sim`. |
+| Acceleration | GPU via Vulkan when the machine has one, CPU when it does not, decided at startup. **The CPU alone is not fast enough** — see below. |
+| Recommended model | With a GPU, `large-v3-turbo` (the default) is comfortable. Without one, no model keeps up \u2014 not even the lightest. |
 | Window chrome | A normal Windows title bar; the macOS traffic-light gutter is not reserved. |
 
-Being precise about how much this is tested: CI compiles, lints, unit-tests and bundles
-the Windows build on every push, so the platform-specific code paths are genuinely
-compiled and not merely written. But **no human has run it in a real meeting.** If you do,
-a report either way would be genuinely useful.
+### GPU acceleration is effectively required on Windows
+
+Measured on a desktop i5-12400F with an RTX 3050 (numbers and method in
+[BENCHMARK.md](BENCHMARK.md)):
+
+| | CPU only | With Vulkan |
+|---|---:|---:|
+| `large-v3-turbo` real-time factor | 21.17 | **0.04** |
+| Final text behind the speaker | 638 s, growing | **1.43 s** |
+| Realtime preview | never appeared | every ~811 ms |
+
+On the CPU every model runs slower than real time, so the queue grows for as long as
+anybody is talking. With the GPU the same machine beats the M2 this project was tuned on.
+
+Install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home), then:
+
+```bat
+scripts\build-windows-gpu.bat
+```
+
+**One build covers both cases.** Compiling the Vulkan backend in does not commit the
+application to using it: at startup it asks the Vulkan loader whether this machine has a
+device, uses it when there is one, and stays on the CPU when there is not. A laptop with
+no graphics driver runs the same executable as a desktop with a discrete card, and the log
+says which one it picked. `AUTO_TRANSCRIPT_GPU=0` forces the CPU, which is the first thing
+to try if a driver starts misbehaving.
+
+The script exists because the build has one non-obvious requirement: it must use **Ninja**
+rather than the default MSBuild generator. ggml builds its shader generator in a deeply
+nested sub-project, and MSBuild's `.tlog` files push the path past the 260-character
+Windows limit — which fails with an error that never mentions paths. Visual Studio Build
+Tools already ships Ninja, so the script just points CMake at it.
+
+The first recording after a build or a driver update runs about 9 seconds behind while
+Vulkan compiles and caches its shaders. It settles by itself.
+
+Being precise about how much this is tested: the Windows build has now been run on real
+hardware — it starts, captures system audio through WASAPI loopback with no driver,
+downloads its models, and transcribes at the latencies in
+[BENCHMARK.md](BENCHMARK.md). Doing that found three bugs CI could not see, because CI
+compiles the code but never runs it: the app crashed on startup over a shortcut Windows
+had already claimed, the audio stream tore itself down and rebuilt 112 times in 6 seconds,
+and `examples/devices.rs` reported a false failure. All three are fixed.
+
+What still has not happened is **an actual meeting**: no soak test, no real speakers, no
+VoIP compression, and no measurement in any language other than English, since Windows
+ships no Indonesian voice to synthesise one with. A report either way would be genuinely
+useful.
 
 ## Development
 

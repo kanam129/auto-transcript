@@ -98,13 +98,13 @@ fn main() {
     .expect("start capture");
 
     std::thread::sleep(Duration::from_millis(300));
-    for _ in 0..4 {
-        let _ = std::process::Command::new("afplay")
-            .arg("/System/Library/Sounds/Glass.aiff")
-            .status();
-    }
+    let mut sound = play_test_sound();
     std::thread::sleep(Duration::from_secs(secs));
     handle.stop();
+    // Otherwise the test sound keeps playing long after the measurement is over.
+    if let Some(child) = sound.as_mut() {
+        let _ = child.kill();
+    }
 
     let peak = *probe.peak_db.lock().unwrap();
     let frames = probe.frames.load(Ordering::SeqCst);
@@ -116,10 +116,60 @@ fn main() {
     }
     println!("File          : {}", wav.display());
     if frames == 0 {
-        println!("\nFAILED: the audio stream never ran.");
+        // A loopback tap is fed by whatever is playing. While the output device is idle
+        // the operating system has nothing to hand over, so "no frames" means "nothing
+        // was playing" far more often than it means "capture is broken".
+        println!(
+            "\nNo audio arrived. If nothing was playing on that device that is expected: \
+             a loopback tap only receives audio while the device is in use. Play something \
+             and run this again before concluding that capture is broken."
+        );
     } else if peak < -70.0 {
         println!("\nThe stream ran but was completely silent — capture permission was probably denied.");
     } else {
         println!("\nPASSED: system audio captured with no extra driver.");
+    }
+}
+
+/// Plays a short sound so the tap has something to capture, returning the process playing
+/// it so the caller can stop it again.
+///
+/// Each platform needs its own way in, and getting this wrong is worse than not trying at
+/// all: this example used to call `afplay`, which exists only on macOS. On Windows it
+/// therefore made no sound whatsoever, and then reported that capture had failed.
+fn play_test_sound() -> Option<std::process::Child> {
+    #[cfg(target_os = "macos")]
+    {
+        for _ in 0..4 {
+            let _ = std::process::Command::new("afplay")
+                .arg("/System/Library/Sounds/Glass.aiff")
+                .status();
+        }
+        None
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Spawned rather than waited for: the sound has to overlap the tap, not precede it.
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "$p = New-Object System.Media.SoundPlayer 'C:\\Windows\\Media\\Alarm01.wav'; \
+                 1..8 | ForEach-Object { $p.PlaySync() }",
+            ])
+            .spawn()
+            .ok()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        for player in ["paplay", "aplay"] {
+            if let Ok(child) = std::process::Command::new(player)
+                .arg("/usr/share/sounds/alsa/Front_Center.wav")
+                .spawn()
+            {
+                return Some(child);
+            }
+        }
+        None
     }
 }

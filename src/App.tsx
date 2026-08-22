@@ -17,6 +17,7 @@ export default function App() {
     recording,
     segments,
     partial,
+    platform,
     init,
     setFontSize,
     toggleRecording,
@@ -29,7 +30,10 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey) return;
+      // Command on macOS, Control everywhere else. `metaKey` on Windows is the Windows
+      // key, so testing it alone left every one of these shortcuts dead there.
+      const modifier = platform === "macos" ? e.metaKey : e.ctrlKey;
+      if (!modifier) return;
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
         void setFontSize(2);
@@ -46,7 +50,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setFontSize, toggleRecording]);
+  }, [platform, setFontSize, toggleRecording]);
 
   if (!ready) {
     return <div className="empty">Starting up…</div>;
