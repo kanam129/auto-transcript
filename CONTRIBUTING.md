@@ -67,3 +67,29 @@ absolute numbers as optimistic and the comparisons between them as meaningful.
 `cargo clippy -D warnings` and `tsc --strict` are the arbiters. Beyond that: comments
 should explain *why*, not *what*. Several comments in this codebase point at a specific
 measurement or a specific bug that motivated the code — that is the standard to aim for.
+
+## Cutting a release
+
+Installers are never built by hand. Pushing a `v*` tag builds macOS (Apple silicon and
+Intel) and Windows in CI and publishes them to a GitHub release.
+
+1. Bump the version in the three places that carry it, all to the same number:
+   `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`. Run
+   `cargo check` in `src-tauri` afterwards so `Cargo.lock` follows.
+2. Move the `— unreleased` heading in `CHANGELOG.md` to the release date.
+3. Commit, then tag and push:
+
+   ```bash
+   git tag v0.1.0
+   git push origin main --tags
+   ```
+
+The workflow refuses the tag if it disagrees with any of the three manifests, so a
+mismatch costs seconds rather than three slow platform builds. Each platform uploads into
+one shared **draft** release; the draft is only published once every platform has
+succeeded, so a half-finished release never appears on the releases page. If one platform
+fails, fix it and re-run the workflow from the Actions tab with the same tag as input.
+
+The Windows installer from CI is the CPU build — GPU support needs the Vulkan SDK present
+at build time, which the runner does not have. `scripts/build-windows-gpu.bat` produces
+that build locally.

@@ -1,6 +1,6 @@
 # Auto-Transcript
 
-[![CI](https://github.com/OWNER/auto-transcript/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/auto-transcript/actions/workflows/ci.yml)
+[![CI](https://github.com/kanam129/auto-transcript/actions/workflows/ci.yml/badge.svg)](https://github.com/kanam129/auto-transcript/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Live captions for meetings on macOS. It captures the audio **coming out** of your computer

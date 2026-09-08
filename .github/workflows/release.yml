@@ -3,11 +3,45 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Lets you re-run a release for a tag that already exists, after fixing a broken build.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release, e.g. v0.1.0"
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  release:
+  # The version lives in four places. A tag that disagrees with them produces installers
+  # whose About box contradicts the release they are attached to, so refuse early rather
+  # than after three slow platform builds.
+  verify:
+    name: Version matches the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Compare tag against the manifests
+        run: |
+          want="${TAG#v}"
+          pkg=$(node -p "require('./package.json').version")
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d'"' -f2)
+          echo "tag=$want package.json=$pkg tauri.conf.json=$conf Cargo.toml=$cargo"
+          for got in "$pkg" "$conf" "$cargo"; do
+            if [ "$got" != "$want" ]; then
+              echo "::error::Tag $TAG does not match version $got in the manifests."
+              exit 1
+            fi
+          done
+
+  build:
     name: ${{ matrix.name }}
+    needs: verify
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -27,6 +61,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - uses: actions/setup-node@v4
         with:
@@ -55,8 +91,8 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Auto-Transcript ${{ github.ref_name }}
+          tagName: ${{ env.TAG }}
+          releaseName: Auto-Transcript ${{ env.TAG }}
           releaseBody: |
             See CHANGELOG.md for what changed.
 
@@ -69,6 +105,21 @@ jobs:
             ```
 
             **Models are not bundled.** The app downloads the model you choose on first run.
+          # Every platform uploads into the same draft. Publishing is a separate job so a
+          # half-finished release — Windows attached, macOS still building or failed — is
+          # never visible on the releases page.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Flip the draft to published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
