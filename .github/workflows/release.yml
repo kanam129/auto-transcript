@@ -79,17 +79,38 @@ jobs:
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      # Signing is optional, but "optional" has to mean the variables are absent, not
+      # empty. Tauri decides to codesign on APPLE_CERTIFICATE merely being set, and a
+      # repository without the secret still renders it as "" — so the bundler runs
+      # `security import` on an empty certificate and dies with "failed to import
+      # keychain certificate". Export the signing variables only when there is a
+      # certificate to import; otherwise the build stays ad-hoc signed as intended.
+      - name: Configure Apple code signing
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signing is optional. Without these secrets the build is ad-hoc signed and
-          # macOS users have to clear the quarantine attribute by hand — see the README.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No APPLE_CERTIFICATE secret is configured, so this build is ad-hoc"
+            echo "signed. Users will have to clear the quarantine attribute by hand —"
+            echo "the release notes and the README both explain how."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            # Heredoc form, so a multi-line certificate survives the round trip.
+            printf '%s<<__SIGNING_EOF__\n%s\n__SIGNING_EOF__\n' "$name" "${!name}" >> "$GITHUB_ENV"
+          done
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ env.TAG }}
           releaseName: Auto-Transcript ${{ env.TAG }}
