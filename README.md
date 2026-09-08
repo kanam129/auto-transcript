@@ -13,7 +13,7 @@ Your microphone is recorded and transcribed quietly as material for AI summaries
 Everything is transcribed locally. The app makes no network connection at all, except to
 download a model — or if you explicitly enable AI summaries yourself.
 
-![The live view: dimmed history above a fixed reading line, the current sentence in white below it](docs/screenshots/live.png)
+![The live view transcribing system audio as it plays: dimmed history above a fixed reading line, the current sentence in white below it](docs/video/demo.gif)
 
 ## Install (macOS)
 

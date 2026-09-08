@@ -13,3 +13,8 @@ src-tauri/gen/
 # runtime noise
 *.log
 .DS_Store
+
+# Demo working files. Only the optimised GIF that the README points at belongs in git —
+# the raw screen recording is 15 MB and would sit in history forever.
+docs/video/*.mp4
+docs/video/poster.png
