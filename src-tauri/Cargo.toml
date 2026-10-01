@@ -24,7 +24,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 futures-util = "0.3"
 
 cpal = "0.18"
-rubato = "0.16"
+rubato = "5.0"
 ringbuf = "0.5"
 hound = "3.5"
 crossbeam-channel = "0.5"
@@ -40,7 +40,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 uuid = { version = "1", features = ["v4"] }
-dirs = "6"
+dirs = "7"
 chrono = "0.4"
 
 # Akselerasi berbeda per platform. Metal ada di setiap Mac, jadi bisa dipakai tanpa
