@@ -24,12 +24,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 futures-util = "0.3"
 
 cpal = "0.18"
-rubato = "0.16"
+rubato = "5.0"
 ringbuf = "0.5"
 hound = "3.5"
 crossbeam-channel = "0.5"
 
-rusqlite = { version = "0.40", features = ["bundled", "functions"] }
+rusqlite = { version = "0.41", features = ["bundled", "functions"] }
 keyring = "4"
 reqwest = { version = "0.13", default-features = false, features = ["json", "default-tls", "http2", "charset", "stream"] }
 sha2 = "0.11"
@@ -40,7 +40,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 uuid = { version = "1", features = ["v4"] }
-dirs = "6"
+dirs = "7"
 chrono = "0.4"
 
 # Akselerasi berbeda per platform. Metal ada di setiap Mac, jadi bisa dipakai tanpa
